@@ -1,30 +1,45 @@
+# Functions for rocessing downloaded data and saving diagnostic log files
 
-# Prepare the data for plotting
-prep_data <-function (model_data) {
+# Prepare the downloaded data for plotting model comparisons and save as .csv and return a dataframe
+prep_data <-function (in_file_path) {
+  
+  # load downloaded .csv file
+  model_data <- readr::read_csv(in_file_path, col_types = 'iccd')
 
-eval_data <- filter(model_data, str_detect(exper_id, 'similar_[0-9]+')) %>%
-  mutate(col = case_when(
-    model_type == 'pb' ~ '#1b9e77',
-    model_type == 'dl' ~'#d95f02',
-    model_type == 'pgdl' ~ '#7570b3'
-  ), pch = case_when(
-    model_type == 'pb' ~ 21,
-    model_type == 'dl' ~ 22,
-    model_type == 'pgdl' ~ 23
-  ), n_prof = as.numeric(str_extract(exper_id, '[0-9]+')))
-
-# Save the processed data
-readr::write_csv(eval_data, file = file.path('2_process/out/', 'model_summary_results.csv'))
-
-return(eval_data)
-
+  eval_data <- filter(model_data, str_detect(exper_id, 'similar_[0-9]+')) %>%
+    mutate(col = case_when(
+      model_type == 'pb' ~ '#1b9e77',
+      model_type == 'dl' ~'#d95f02',
+      model_type == 'pgdl' ~ '#7570b3'
+    ), pch = case_when(
+      model_type == 'pb' ~ 21,
+      model_type == 'dl' ~ 22,
+      model_type == 'pgdl' ~ 23
+    ), n_prof = as.numeric(str_extract(exper_id, '[0-9]+')))
+  
+  return(eval_data)
+  
 }
 
-# Using processed data
-make_log_file <-function(eval_data){
+#--------------------  
+
+# Save the processed data
+save_data <- function(eval_data, 
+                   out_file_path){
   
-# Save the model diagnostics
-render_data <- list(pgdl_980mean = filter(eval_data, model_type == 'pgdl', exper_id == "similar_980") %>% pull(rmse) %>% mean %>% round(2),
+  readr::write_csv(eval_data, file = out_file_path)
+
+  return(out_file_path)
+}
+
+#---------------------
+
+# Using processed data, generate a diagnostic output log file
+make_log_file <-function(eval_data, 
+                         out_file_path){
+  
+  # Save the model diagnostics
+  render_data <- list(pgdl_980mean = filter(eval_data, model_type == 'pgdl', exper_id == "similar_980") %>% pull(rmse) %>% mean %>% round(2),
                       dl_980mean = filter(eval_data, model_type == 'dl', exper_id == "similar_980") %>% pull(rmse) %>% mean %>% round(2),
                       pb_980mean = filter(eval_data, model_type == 'pb', exper_id == "similar_980") %>% pull(rmse) %>% mean %>% round(2),
                       dl_500mean = filter(eval_data, model_type == 'dl', exper_id == "similar_500") %>% pull(rmse) %>% mean %>% round(2),
@@ -33,11 +48,13 @@ render_data <- list(pgdl_980mean = filter(eval_data, model_type == 'pgdl', exper
                       pb_100mean = filter(eval_data, model_type == 'pb', exper_id == "similar_100") %>% pull(rmse) %>% mean %>% round(2),
                       pgdl_2mean = filter(eval_data, model_type == 'pgdl', exper_id == "similar_2") %>% pull(rmse) %>% mean %>% round(2),
                       pb_2mean = filter(eval_data, model_type == 'pb', exper_id == "similar_2") %>% pull(rmse) %>% mean %>% round(2))
-
-template_1 <- 'resulted in mean RMSEs (means calculated as average of RMSEs from the five dataset iterations) of {{pgdl_980mean}}, {{dl_980mean}}, and {{pb_980mean}}°C for the PGDL, DL, and PB models, respectively.
+  
+  template_1 <- 'resulted in mean RMSEs (means calculated as average of RMSEs from the five dataset iterations) of {{pgdl_980mean}}, {{dl_980mean}}, and {{pb_980mean}}°C for the PGDL, DL, and PB models, respectively.
   The relative performance of DL vs PB depended on the amount of training data. The accuracy of Lake Mendota temperature predictions from the DL was better than PB when trained on 500 profiles 
   ({{dl_500mean}} and {{pb_500mean}}°C, respectively) or more, but worse than PB when training was reduced to 100 profiles ({{dl_100mean}} and {{pb_100mean}}°C respectively) or fewer.
   The PGDL prediction accuracy was more robust compared to PB when only two profiles were provided for training ({{pgdl_2mean}} and {{pb_2mean}}°C, respectively). '
+  
+  whisker.render(template_1 %>% str_remove_all('\n') %>% str_replace_all('  ', ' '), render_data ) %>% cat(file = out_file_path)
 
-whisker.render(template_1 %>% str_remove_all('\n') %>% str_replace_all('  ', ' '), render_data ) %>% cat(file = file.path('2_process/out/', 'model_diagnostic_text.txt'))
-}
+  return(out_file_path)
+  }
